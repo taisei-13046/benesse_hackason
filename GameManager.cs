@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Collections;
+using System.Linq;
 
 // MonoBehaviourを継承することでオブジェクトにコンポーネントとして
 // アタッチすることができるようになる
@@ -27,6 +28,8 @@ public class GameManager : MonoBehaviour
     private Image backgroundImage;
     [SerializeField]
     private string spritesDirectory = "Sprites/";
+    [SerializeField]
+    private string textFile = "Texts/Scenario";
 
 
     // パラメーターを追加
@@ -36,9 +39,70 @@ public class GameManager : MonoBehaviour
     private const char SEPARATE_PAGE = '&';
     private Queue<string> _pageQueue;
 
+    private const string COMMAND_CHARACTER_IMAGE = "charaimg";
+    private const string COMMAND_SIZE = "_size";
+    private const string COMMAND_POSITION = "_pos";
+    private const string COMMAND_ROTATION = "_rotate";
+    private const string CHARACTER_IMAGE_PREFAB = "CharacterImage";
+    [SerializeField]
+    private GameObject characterImages;
+    [SerializeField]
+    private string prefabsDirectory = "Prefabs/";
+    private List<Image> _charaImageList = new List<Image>();
+    private const string COMMAND_ACTIVE = "_active";
+    private const string COMMAND_DELETE = "_delete";
+    private const char SEPARATE_SUBSCENE = '#';
+    private Dictionary<string, Queue<string>> _subScenes =
+           new Dictionary<string, Queue<string>>();
+
     // パラメーターを変更
-    private string _text =
-        "!background_sprite=\"background_sprite1\"!background_color=\"255,0,255\" & みにに「Hello,World!」&みにに「これはテキスト表示のサンプルです」&!background_sprite=\"background_sprite2\"!background_color=\"255,0,255\"&名無し「こんにちは！」";
+    private string _text = "";
+
+
+    /**
+* パラメーターからboolを取得する
+*/
+    private bool ParameterToBool(string parameter)
+    {
+        string p = parameter.Replace(" ", "");
+        return p.Equals("true") || p.Equals("TRUE");
+    }
+
+    /**
+* テキストファイルを読み込む
+*/
+    private string LoadTextFile(string fname)
+    {
+        TextAsset textasset = Resources.Load<TextAsset>(fname);
+        return textasset.text.Replace("\n", "").Replace("\r", "");
+    }
+
+    /**
+* 立ち絵の設定
+*/
+    private void SetCharacterImage(string name, string cmd, string parameter)
+    {
+        cmd = cmd.Replace(COMMAND_CHARACTER_IMAGE, "");
+        name = name.Substring(name.IndexOf('"') + 1, name.LastIndexOf('"') - name.IndexOf('"') - 1);
+        Image image = _charaImageList.Find(n => n.name == name);
+        if (image == null)
+        {
+            image = Instantiate(Resources.Load<Image>(prefabsDirectory + CHARACTER_IMAGE_PREFAB), characterImages.transform);
+            image.name = name;
+            _charaImageList.Add(image);
+        }
+        SetImage(cmd, parameter, image);
+    }
+
+    /**
+    * パラメーターからベクトルを取得する
+*/
+    private Vector3 ParameterToVector3(string parameter)
+    {
+        string[] ps = parameter.Replace(" ", "").Split(',');
+        return new Vector3(float.Parse(ps[0]), float.Parse(ps[1]), float.Parse(ps[2]));
+    }
+
 
     /**
 * スプライトをファイルから読み出し、インスタンス化する
@@ -77,6 +141,22 @@ public class GameManager : MonoBehaviour
             case COMMAND_COLOR:
                 image.color = ParameterToColor(parameter);
                 break;
+            case COMMAND_SIZE:
+                image.GetComponent<RectTransform>().sizeDelta = ParameterToVector3(parameter);
+                break;
+            case COMMAND_POSITION:
+                image.GetComponent<RectTransform>().anchoredPosition = ParameterToVector3(parameter);
+                break;
+            case COMMAND_ROTATION:
+                image.GetComponent<RectTransform>().eulerAngles = ParameterToVector3(parameter);
+                break;
+            case COMMAND_ACTIVE:
+                image.gameObject.SetActive(ParameterToBool(parameter));
+                break;
+            case COMMAND_DELETE:
+                _charaImageList.Remove(image);
+                Destroy(image.gameObject);
+                break;
         }
     }
 
@@ -94,16 +174,15 @@ public class GameManager : MonoBehaviour
 */
     private void ReadCommand(string cmdLine)
     {
-        // 最初の「!」を削除する
         cmdLine = cmdLine.Remove(0, 1);
         Queue<string> cmdQueue = SeparateString(cmdLine, SEPARATE_COMMAND);
         foreach (string cmd in cmdQueue)
         {
-            // 「=」で分ける
             string[] cmds = cmd.Split(COMMAND_SEPARATE_PARAM);
-            // もし背景コマンドの文字列が含まれていたら
             if (cmds[0].Contains(COMMAND_BACKGROUND))
                 SetBackgroundImage(cmds[0], cmds[1]);
+            if (cmds[0].Contains(COMMAND_CHARACTER_IMAGE))
+                SetCharacterImage(cmds[1], cmds[0], cmds[2]);
         }
     }
 
@@ -116,15 +195,6 @@ public class GameManager : MonoBehaviour
         Queue<string> queue = new Queue<string>();
         foreach (string l in strs) queue.Enqueue(l);
         return queue;
-    }
-
-    /**
-* 初期化する
-*/
-    private void Init()
-    {
-        _pageQueue = SeparateString(_text, SEPARATE_PAGE);
-        ShowNextPage();
     }
 
     /**
@@ -216,7 +286,6 @@ public class GameManager : MonoBehaviour
     // メソッドを変更
     private void ReadLine(string text)
     {
-        // 最初が「!」だったら
         if (text[0].Equals(SEPARATE_COMMAND))
         {
             ReadCommand(text);
@@ -226,10 +295,31 @@ public class GameManager : MonoBehaviour
         string[] ts = text.Split(SEPARATE_MAIN_START);
         string name = ts[0];
         string main = ts[1].Remove(ts[1].LastIndexOf(SEPARATE_MAIN_END));
-        nameText.text = name;
+        if (name.Equals("")) nameText.transform.parent.gameObject.SetActive(false);
+        else
+        {
+            nameText.text = name;
+            nameText.transform.parent.gameObject.SetActive(true);
+        }
         mainText.text = "";
         _charQueue = SeparateString(main);
         StartCoroutine(ShowChars(captionSpeed));
+    }
+    /**
+* 初期化する
+*/
+    private void Init()
+    {
+        _text = LoadTextFile(textFile);
+        Queue<string> subScenes = SeparateString(_text, SEPARATE_SUBSCENE);
+        foreach (string subScene in subScenes)
+        {
+            if (subScene.Equals("")) continue;
+            Queue<string> pages = SeparateString(subScene, SEPARATE_PAGE);
+            _subScenes[pages.Dequeue()] = pages;
+        }
+        _pageQueue = _subScenes.First().Value;
+        ShowNextPage();
     }
 
     private void Start()
