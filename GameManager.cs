@@ -68,6 +68,17 @@ public class GameManager : MonoBehaviour
 
 
     /**
+* 選択肢がクリックされた
+*/
+    private void SelectButtonOnClick(string label)
+    {
+        foreach (Button button in _selectButtonList) Destroy(button.gameObject);
+        _selectButtonList.Clear();
+        JumpTo('"' + label + '"');
+        ShowNextPage();
+    }
+
+    /**
 * 選択肢の設定
 */
     private void SetSelectButton(string name, string cmd, string parameter)
@@ -79,6 +90,7 @@ public class GameManager : MonoBehaviour
         {
             button = Instantiate(Resources.Load<Button>(prefabsDirectory + SELECT_BUTTON_PREFAB), selectButtons.transform);
             button.name = name;
+            button.onClick.AddListener(() => SelectButtonOnClick(name));
             _selectButtonList.Add(button);
         }
         SetImage(cmd, parameter, button.image);
@@ -311,8 +323,8 @@ public class GameManager : MonoBehaviour
         if (_charQueue.Count > 0) OutputAllChar();
         else
         {
+            if (_selectButtonList.Count > 0) return;
             if (!ShowNextPage())
-                // UnityエディタのPlayモードを終了する
                 UnityEditor.EditorApplication.isPlaying = false;
         }
     }
@@ -331,6 +343,7 @@ public class GameManager : MonoBehaviour
         if (text[0].Equals(SEPARATE_COMMAND))
         {
             ReadCommand(text);
+            if (_selectButtonList.Count > 0) return;
             ShowNextPage();
             return;
         }
