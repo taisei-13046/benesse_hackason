@@ -30,6 +30,8 @@ public class GameManager : MonoBehaviour
     private string spritesDirectory = "Sprites/";
     [SerializeField]
     private string textFile = "Texts/Scenario";
+    private const string COMMAND_JUMP = "jump_to";
+
 
 
     // パラメーターを追加
@@ -54,10 +56,42 @@ public class GameManager : MonoBehaviour
     private const char SEPARATE_SUBSCENE = '#';
     private Dictionary<string, Queue<string>> _subScenes =
            new Dictionary<string, Queue<string>>();
+    private const string COMMAND_SELECT = "select";
+    private const string COMMAND_TEXT = "_text";
+    private const string SELECT_BUTTON_PREFAB = "SelectButton";
+    [SerializeField]
+    private GameObject selectButtons;
+    private List<Button> _selectButtonList = new List<Button>();
 
     // パラメーターを変更
     private string _text = "";
 
+
+    /**
+* 選択肢の設定
+*/
+    private void SetSelectButton(string name, string cmd, string parameter)
+    {
+        cmd = cmd.Replace(COMMAND_SELECT, "");
+        name = name.Substring(name.IndexOf('"') + 1, name.LastIndexOf('"') - name.IndexOf('"') - 1);
+        Button button = _selectButtonList.Find(n => n.name == name);
+        if (button == null)
+        {
+            button = Instantiate(Resources.Load<Button>(prefabsDirectory + SELECT_BUTTON_PREFAB), selectButtons.transform);
+            button.name = name;
+            _selectButtonList.Add(button);
+        }
+        SetImage(cmd, parameter, button.image);
+    }
+
+    /**
+* 対応するラベルまでジャンプする
+*/
+    private void JumpTo(string parameter)
+    {
+        parameter = parameter.Substring(parameter.IndexOf('"') + 1, parameter.LastIndexOf('"') - parameter.IndexOf('"') - 1);
+        _pageQueue = _subScenes[parameter];
+    }
 
     /**
 * パラメーターからboolを取得する
@@ -135,6 +169,9 @@ public class GameManager : MonoBehaviour
         parameter = parameter.Substring(parameter.IndexOf('"') + 1, parameter.LastIndexOf('"') - parameter.IndexOf('"') - 1);
         switch (cmd)
         {
+            case COMMAND_TEXT:
+                image.GetComponentInChildren<Text>().text = parameter;
+                break;
             case COMMAND_SPRITE:
                 image.sprite = LoadSprite(parameter);
                 break;
@@ -160,6 +197,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
+
     /**
 * 背景の設定
 */
@@ -183,6 +221,10 @@ public class GameManager : MonoBehaviour
                 SetBackgroundImage(cmds[0], cmds[1]);
             if (cmds[0].Contains(COMMAND_CHARACTER_IMAGE))
                 SetCharacterImage(cmds[1], cmds[0], cmds[2]);
+            if (cmds[0].Contains(COMMAND_JUMP))
+                JumpTo(cmds[1]);
+            if (cmds[0].Contains(COMMAND_SELECT))
+                SetSelectButton(cmds[1], cmds[0], cmds[2]);
         }
     }
 
